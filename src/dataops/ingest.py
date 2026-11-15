@@ -20,10 +20,21 @@ data = data.rename(columns={"Date": "date", "Ticker": "ticker", "Open": "open_pr
 #Filtering out collumns for SQL table
 data = data[["date", "ticker", "open_price", "close_price", "volume"]]
 
-print(data.head())
+data["date"] = data["date"].dt.strftime("%Y-%m-%d")
+
+rows = data.values.tolist()
 
 conn = sqlite3.connect("src/db/market_data.db")
-data.to_sql("daily_futures_prices", conn, if_exists="append", index=False)
+cursor = conn.cursor()
+
+cursor.executemany("""
+    INSERT OR REPLACE INTO daily_futures_prices (date, ticker, open_price, close_price, volume)
+    VALUES (?, ?, ?, ?, ?)
+""", rows)
+
+conn.commit()
+cursor.execute("SELECT COUNT(*) FROM daily_futures_prices")
+print("Total rows in vault:", cursor.fetchone()[0])
 conn.close()
 
 print("end")
