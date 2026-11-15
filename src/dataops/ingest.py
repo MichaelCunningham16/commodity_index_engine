@@ -1,5 +1,6 @@
 import yfinance as yf
 import pandas as pd
+import sqlite3
 
 #tickers for crude oil, gold, wheat
 ticker = ["CL=F", "GC=F", "HG=F", "NG=F", "ZW=F"]
@@ -20,3 +21,9 @@ data = data.rename(columns={"Date": "date", "Ticker": "ticker", "Open": "open_pr
 data = data[["date", "ticker", "open_price", "close_price", "volume"]]
 
 print(data.head())
+
+conn = sqlite3.connect("src/db/market_data.db")
+data.to_sql("daily_futures_prices", conn, if_exists="append", index=False)
+conn.close()
+
+print("end")
