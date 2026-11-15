@@ -29,3 +29,9 @@ CREATE TABLE IF NOT EXISTS daily_index_positions (
 );
 """)
 
+# makes the changes to the market data file and closes the connection
+conn.commit()
+conn.close()
+
+print("Market_data database setup!")
+
