@@ -11,3 +11,5 @@ __pycache__/
 # Editor-specific settings
 .vscode/
 
+# Data base files
+*.db
