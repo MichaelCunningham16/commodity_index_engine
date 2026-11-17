@@ -2,39 +2,42 @@ import yfinance as yf
 import pandas as pd
 import sqlite3
 
-#tickers for crude oil, gold, wheat
-ticker = ["CL=F", "GC=F", "HG=F", "NG=F", "ZW=F"]
+def extract_prices(tickers: list[str]) -> pd.DataFrame:
+    # Dowload the wide dataframe 
+    df = yf.download(tickers=tickers, period="1mo", interval="1d")
+    return df
 
-#dowload the wide dataframe 
-data = yf.download(ticker, period="1mo", interval="1d")
+def transform_prices(raw_df: pd.DataFrame) -> list:
+    # Moves the tickers down into the rows
+    data = raw_df.stack(level=1)
+    # Move date from the index label into being a column
+    data = data.reset_index()
+    # Rename columns to match the exact naming as they are in the SQL table
+    data = data.rename(columns={"Date": "date", "Ticker": "ticker", "Open": "open_price", "Close": "close_price", "Volume": "volume"})
+    # Filtering out columns for SQL table
+    data = data[["date", "ticker", "open_price", "close_price", "volume"]]
+    # Changing the date formatting
+    data["date"] = data["date"].dt.strftime("%Y-%m-%d")
+    # Strip away column names and row indices and panda overhead, and change numpy array into list
+    data = data.values.tolist()
+    return data
 
-#Moves the tickers down into the rows
-data = data.stack(level=1)
+def upsert_prices(price_data_list: list, db_path: str) -> None:
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
 
-#move date from the index label into being a column
-data = data.reset_index()
+    cursor.executemany("""
+        INSERT OR REPLACE INTO daily_futures_prices (date, ticker, open_price, close_price, volume)
+        VALUES (?, ?, ?, ?, ?)
+    """, price_data_list)
 
-#rename colums to match the exact naming as they are in the SQL table
-data = data.rename(columns={"Date": "date", "Ticker": "ticker", "Open": "open_price", "Close": "close_price", "Volume": "volume"})
+    conn.commit()
+    cursor.execute("SELECT COUNT(*) FROM daily_futures_prices")
+    print("Total rows in vault:", cursor.fetchone()[0])
+    conn.close()
 
-#Filtering out collumns for SQL table
-data = data[["date", "ticker", "open_price", "close_price", "volume"]]
 
-data["date"] = data["date"].dt.strftime("%Y-%m-%d")
-
-rows = data.values.tolist()
-
-conn = sqlite3.connect("src/db/market_data.db")
-cursor = conn.cursor()
-
-cursor.executemany("""
-    INSERT OR REPLACE INTO daily_futures_prices (date, ticker, open_price, close_price, volume)
-    VALUES (?, ?, ?, ?, ?)
-""", rows)
-
-conn.commit()
-cursor.execute("SELECT COUNT(*) FROM daily_futures_prices")
-print("Total rows in vault:", cursor.fetchone()[0])
-conn.close()
-
-print("end")
+if __name__ == "__main__":
+    raw = extract_prices(["CL=F", "GC=F", "HG=F", "NG=F", "ZW=F"])
+    clean_data = transform_prices(raw)
+    upsert_prices(clean_data, "src/db/market_data.db")
