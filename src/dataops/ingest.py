@@ -11,24 +11,38 @@ def extract_prices(tickers: list[str]) -> pd.DataFrame:
         df = yf.download(tickers=tickers, period="1mo", interval="1d")
         return df
     except Exception as e:
-        logging.error(f"Error downloading dataframe: {e}")
+        logging.error(f"Error downloading dataframe: {e}") 
 
-def transform_prices(raw_df: pd.DataFrame) -> list:
+def transform_market_data(raw_df: pd.DataFrame) -> pd.DataFrame:
     # Moves the tickers down into the rows
-    data = raw_df.stack(level=1)
+    clean_df = raw_df.stack(level=1)
     # Move date from the index label into being a column
-    data = data.reset_index()
+    clean_df = clean_df.reset_index()
     # Rename columns to match the exact naming as they are in the SQL table
-    data = data.rename(columns={"Date": "date", "Ticker": "ticker", "Open": "open_price", "Close": "close_price", "Volume": "volume"})
+    clean_df = clean_df.rename(columns={"Date": "date", "Ticker": "ticker", "Open": "open_price", "Close": "close_price", "Volume": "volume"})
     # Filtering out columns for SQL table
-    data = data[["date", "ticker", "open_price", "close_price", "volume"]]
+    clean_df = clean_df[["date", "ticker", "open_price", "close_price", "volume"]]
     # Changing the date formatting
-    data["date"] = data["date"].dt.strftime("%Y-%m-%d")
+    clean_df["date"] = clean_df["date"].dt.strftime("%Y-%m-%d")
     # Strip away column names and row indices and panda overhead, and change numpy array into list
-    data = data.values.tolist()
-    return data
+    return clean_df
 
-def upsert_prices(price_data_list: list, db_path: str) -> None:
+def transform_positions(clean_data: pd.DataFrame) -> list:
+    weight_map = {"CL=F": 0.2, "GC=F": 0.3, "HG=F": 0.1, "NG=F": 0.05, "ZW=F": 0.35}
+
+    pos_df = clean_data[["date", "ticker"]].copy()
+
+    pos_df["index_name"] = "COMMODITY_CORE"
+    pos_df["weight"] = pos_df["ticker"].map(weight_map)
+
+    pos_df = pos_df[["date", "index_name", "ticker", "weight"]]
+    return pos_df
+
+def upsert_market_data(clean_df: pd.DataFrame, pos_df: pd.DataFrame, db_path: str) -> None:
+
+    price_data_list = clean_df.values.tolist()
+    index_data_list = pos_df.values.tolist()
+
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
@@ -37,9 +51,16 @@ def upsert_prices(price_data_list: list, db_path: str) -> None:
         VALUES (?, ?, ?, ?, ?)
     """, price_data_list)
 
+    cursor.executemany("""
+            INSERT OR REPLACE INTO daily_index_positions (date, index_name, ticker, weight)
+            VALUES (?, ?, ?, ?)
+        """, index_data_list)
+
     conn.commit()
     cursor.execute("SELECT COUNT(*) FROM daily_futures_prices")
-    logging.info(f"Total rows in vault:, {cursor.fetchone()[0]}")
+    logging.info(f"Total rows in table 1:, {cursor.fetchone()[0]}")
+    cursor.execute("SELECT COUNT(*) FROM daily_index_positions")
+    logging.info(f"Total rows in table 2:, {cursor.fetchone()[0]}")
     conn.close()
 
 if __name__ == "__main__":
@@ -47,6 +68,7 @@ if __name__ == "__main__":
     if raw is None or raw.empty:
         logging.error("Error with dowloaded dataframe")
     else:
-        clean_data = transform_prices(raw)
-        upsert_prices(clean_data, "src/db/market_data.db")
+        clean_data = transform_market_data(raw)
+        index_data = transform_positions(clean_data)
+        upsert_market_data(clean_data, index_data, "src/db/market_data.db")
 
