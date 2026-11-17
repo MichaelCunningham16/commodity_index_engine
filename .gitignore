@@ -13,3 +13,6 @@ __pycache__/
 
 # Data base files
 *.db
+
+# Logging files
+*.log

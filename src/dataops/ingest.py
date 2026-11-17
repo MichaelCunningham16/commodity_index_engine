@@ -1,6 +1,9 @@
 import yfinance as yf
 import pandas as pd
 import sqlite3
+import logging
+
+logging.basicConfig(filename="app.log", encoding="utf-8", filemode="a", format="{asctime} - {levelname} - {message}", style="{", datefmt="%Y-%m-%d %H:%M", level=logging.INFO)
 
 def extract_prices(tickers: list[str]) -> pd.DataFrame:
     # Dowload the wide dataframe 
@@ -33,7 +36,7 @@ def upsert_prices(price_data_list: list, db_path: str) -> None:
 
     conn.commit()
     cursor.execute("SELECT COUNT(*) FROM daily_futures_prices")
-    print("Total rows in vault:", cursor.fetchone()[0])
+    logging.info(f"Total rows in vault:, {cursor.fetchone()[0]}")
     conn.close()
 
 
