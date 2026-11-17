@@ -6,9 +6,12 @@ import logging
 logging.basicConfig(filename="app.log", encoding="utf-8", filemode="a", format="{asctime} - {levelname} - {message}", style="{", datefmt="%Y-%m-%d %H:%M", level=logging.INFO)
 
 def extract_prices(tickers: list[str]) -> pd.DataFrame:
-    # Dowload the wide dataframe 
-    df = yf.download(tickers=tickers, period="1mo", interval="1d")
-    return df
+    try:
+        # Dowload the wide dataframe 
+        df = yf.download(tickers=tickers, period="1mo", interval="1d")
+        return df
+    except Exception as e:
+        logging.error(f"Error downloading dataframe: {e}")
 
 def transform_prices(raw_df: pd.DataFrame) -> list:
     # Moves the tickers down into the rows
@@ -39,8 +42,11 @@ def upsert_prices(price_data_list: list, db_path: str) -> None:
     logging.info(f"Total rows in vault:, {cursor.fetchone()[0]}")
     conn.close()
 
-
 if __name__ == "__main__":
     raw = extract_prices(["CL=F", "GC=F", "HG=F", "NG=F", "ZW=F"])
-    clean_data = transform_prices(raw)
-    upsert_prices(clean_data, "src/db/market_data.db")
+    if raw is None or raw.empty:
+        logging.error("Error with dowloaded dataframe")
+    else:
+        clean_data = transform_prices(raw)
+        upsert_prices(clean_data, "src/db/market_data.db")
+
