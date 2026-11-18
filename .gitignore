@@ -16,3 +16,15 @@ __pycache__/
 
 # Logging files
 *.log
+
+# OS-generated files (Prevents Windows/Mac junk files from cluttering the repo)
+.DS_Store
+Thumbs.db
+
+# Jupyter Notebook checkpoints (Standard for quant/data science projects)
+.ipynb_checkpoints/
+
+# Flat data exports (In case you ever export Pandas dataframes to inspect locally)
+*.csv
+*.xlsx
+*.parquet
